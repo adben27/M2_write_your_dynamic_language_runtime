@@ -117,15 +117,14 @@ public final class StackInterpreter {
           //dumpStack("in lookup", stack, sp, bp, dict, heap);
         }
         case Instructions.REGISTER -> {
-          throw new UnsupportedOperationException("TODO REGISTER");
           // find the current instruction
-          //int indexTagValue = ...
+          var indexTagValue = instrs[pc++];
           // decode the name from the instructions
-          //String name = ...
+          var name = (String) decodeDictObject(indexTagValue, dict);
           // pop the value from the stack and decode it
-          //Object value = ...
+          var value = decodeAnyValue(pop(stack, --sp), dict, heap);
           // register it in the global environment
-          // globalEnv.register(...);
+          globalEnv.register(name, value);
         }
         case Instructions.LOAD -> {
           // get local offset
@@ -144,11 +143,10 @@ public final class StackInterpreter {
           store(stack, bp, offset, value);
         }
         case Instructions.DUP -> {
-          throw new UnsupportedOperationException("TODO DUP");
           // get value on top of the stack (without remove it)
-          //var value = ...
+          var value = peek(stack, sp);
           // push it on top of the stack
-          //push(...);
+          push(stack, sp++, value);
         }
         case Instructions.POP -> {
           // adjust the stack pointer
@@ -176,7 +174,7 @@ public final class StackInterpreter {
           // stack[baseArg + QUALIFIER_BASE_ARG_OFFSET] is the qualifier (aka the function)
 
           // decode qualifier
-          var newFunction = (JSObject) decodeDictObject(stack[baseArg + QUALIFIER_BASE_ARG_OFFSET], dict);
+          var newFunction = (JSObject) decodeAnyValue(stack[baseArg + QUALIFIER_BASE_ARG_OFFSET], dict, heap);
           //{ // DEBUG
           //	var receiver = decodeAnyValue(stack[baseArg + RECEIVER_BASE_ARG_OFFSET], dict, heap);
           //	var args = new Object[argumentCount];
@@ -209,37 +207,38 @@ public final class StackInterpreter {
 
             // push return value
             push(stack, sp++, result);
+            continue;
           }
 
           // initialize new code
-          //code = (Code) maybeCode;
+          code = (Code) maybeCode;
 
           // check the number of arguments
-          //if (code.parameterCount() != argumentCount + 1/* this */) {
-          //	throw new Failure("wrong number of arguments for " + newFunction.name() + " expected "
-          //			+ (code.parameterCount() - 1) + " but was " + argumentCount);
-          //}
+          if(code.parameterCount() != argumentCount + 1/* this */) {
+          	throw new Failure("wrong number of arguments for " + newFunction.name() + " expected "
+          			+ (code.parameterCount() - 1) + " but was " + argumentCount);
+          }
 
           // save bp/pc/code in activation zone
           // stack[activation + offset] = ??
-          //var activation = ...;
-          //stack[activation + BP_OFFSET] = ...;
-          //stack[activation + PC_OFFSET] = ...;
-          //stack[activation + FUN_OFFSET] = ...;
+          var activation = baseArg - 1 + code.slotCount();
+          stack[activation + BP_OFFSET] = bp;
+          stack[activation + PC_OFFSET] = pc;
+          stack[activation + FUN_OFFSET] = encodeDictObject(function, dict);
 
           // initialize pc, bp and sp
-          //pc = ...
-          //bp = ...
-          //sp = ...
+          pc = 0;
+          bp = baseArg - 1 /* this */;
+          sp = activation + ACTIVATION_SIZE;
 
           // initialize all locals that are not parameters
-          //for (var i = bp + code.parameterCount(); i < bp + code.slotCount(); i++) {
-          //	stack[i] = undefined;
-          //}
+          for (var i = bp + code.parameterCount(); i < bp + code.slotCount(); i++) {
+          	stack[i] = undefined;
+          }
 
           // initialize function and instrs of the new function
-          //function = newFunction;
-          //instrs = code.instrs();
+          function = newFunction;
+          instrs = code.instrs();
 
           // DEBUG
           // dumpStack(">end funcall dump", stack, sp, bp, dict, heap);
@@ -262,8 +261,8 @@ public final class StackInterpreter {
           }
 
           // restore sp, function and bp
-          sp = bp + code.slotCount() + ACTIVATION_SIZE;
-          function = (JSObject) decodeAnyValue(stack[activation + FUN_OFFSET], dict, heap);
+          sp = bp - 1 /* qualifier */;
+          function = (JSObject) decodeDictObject(stack[activation + FUN_OFFSET], dict);
           bp = stack[activation + BP_OFFSET];
 
           // restore code and instrs
@@ -277,22 +276,20 @@ public final class StackInterpreter {
           // dumpStack("> end ret dump", stack, sp, bp, dict, heap);
         }
         case Instructions.GOTO -> {
-          throw new UnsupportedOperationException("TODO GOTO");
           // get the label
-          //int label = ...
+          var label = instrs[pc++];
           // change the program counter to the label
-          //pc = ...
+          pc = label;
         }
         case Instructions.JUMP_IF_FALSE -> {
-          throw new UnsupportedOperationException("TODO JUMP_IF_FALSE");
           // get the label
-          //var label = ...
+          var label = instrs[pc++];
           // get the value on top of the stack
-          //var condition = ...
+          var condition = pop(stack, --sp);
           // if condition is false change the program counter to the label
-          //if (condition == TagValues.FALSE) {
-          //pc = label;
-          //}
+          if (condition == TagValues.FALSE) {
+            pc = label;
+          }
         }
         case Instructions.NEW -> {
           throw new UnsupportedOperationException("TODO NEW");
